@@ -1,18 +1,82 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, TrendingUp, TrendingDown, X, Wallet } from "lucide-react";
+import { Plus, Trash2, TrendingUp, TrendingDown, X, Wallet, Sun, Moon, Languages } from "lucide-react";
 import { storage } from "./storage.js";
 
 const SIN_MONTHS = ["ජනවාරි","පෙබරවාරි","මාර්තු","අප්‍රේල්","මැයි","ජූනි","ජූලි","අගෝස්තු","සැප්තැම්බර්","ඔක්තෝබර්","නොවැම්බර්","දෙසැම්බර්"];
 const SIN_MONTHS_SHORT = ["ජන","පෙබ","මාර්","අප්‍රේ","මැයි","ජූනි","ජූලි","අගෝ","සැප්","ඔක්","නොවැ","දෙසැ"];
-const SIN_DIGITS = ["0","1","2","3","4","5","6","7","8","9"];
+const EN_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const EN_MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const DEFAULT_EXP_CATS = ["කෑම", "ගමන්වීම", "බිල්පත්"];
 const DEFAULT_INC_CATS = ["වැටුප"];
 
-function fmtMoney(n) {
+// UI text for both languages. Category names / notes the user types in are
+// left exactly as typed - only the app's own labels are translated here.
+const STRINGS = {
+  si: {
+    appName: "මුදල් ඩයරිය",
+    loading: "පූරණය වෙමින්...",
+    balanceLabel: "මෙම මාසයේ ශේෂය",
+    incomeLbl: "ආදායම්",
+    expenseLbl: "වියදම්",
+    targetLabel: "වියදම් ඉලක්කය",
+    change: "වෙනස් කරන්න",
+    save: "සුරකින්න",
+    overBudget: (amt) => `ඉලක්කයට වඩා ${amt} වැඩිපුර වියදම් කර ඇත`,
+    remaining: (amt) => `ඉතිරි ${amt} වියදම් කළ හැක`,
+    expenseTab: "වියදමක්",
+    incomeTab: "ආදායමක්",
+    amountPlaceholder: "මුදල",
+    manageCats: "+ ප්‍රවර්ග",
+    closeCats: "✕",
+    newCatPlaceholder: "අලුත් ප්‍රවර්ගයක් (උදා: බෙහෙත්)",
+    add: "එකතු කරන්න",
+    notePlaceholder: "සටහනක් (විකල්ප)",
+    addExpense: "වියදම එකතු කරන්න",
+    addIncome: "ආදායම එකතු කරන්න",
+    emptyState: "තවම ගනුදෙනු නැත. ඉහළින් එකක් එකතු කරන්න.",
+    saving: "සුරකිමින්...",
+    autosave: "දත්ත ස්වයංක්‍රීයව සුරකිනු ලැබේ",
+    currency: "රු. ",
+    months: SIN_MONTHS,
+    monthsShort: SIN_MONTHS_SHORT,
+    langBtn: "EN",
+  },
+  en: {
+    appName: "Money Diary",
+    loading: "Loading...",
+    balanceLabel: "This month's balance",
+    incomeLbl: "Income",
+    expenseLbl: "Expenses",
+    targetLabel: "Spending target",
+    change: "change",
+    save: "Save",
+    overBudget: (amt) => `${amt} over your target`,
+    remaining: (amt) => `${amt} left to spend`,
+    expenseTab: "Expense",
+    incomeTab: "Income",
+    amountPlaceholder: "Amount",
+    manageCats: "+ Categories",
+    closeCats: "✕",
+    newCatPlaceholder: "New category (e.g. Medicine)",
+    add: "Add",
+    notePlaceholder: "Note (optional)",
+    addExpense: "Add expense",
+    addIncome: "Add income",
+    emptyState: "No transactions yet. Add one above.",
+    saving: "Saving...",
+    autosave: "Data saves automatically",
+    currency: "Rs. ",
+    months: EN_MONTHS,
+    monthsShort: EN_MONTHS_SHORT,
+    langBtn: "සිං",
+  },
+};
+
+function fmtMoney(n, currency) {
   const sign = n < 0 ? "-" : "";
   const v = Math.abs(Math.round(n));
-  return sign + "රු. " + v.toLocaleString("en-US");
+  return sign + currency + v.toLocaleString("en-US");
 }
 
 function todayStr() {
@@ -20,9 +84,9 @@ function todayStr() {
   return d.toISOString().slice(0, 10);
 }
 
-function sinDate(dateStr) {
+function fmtDate(dateStr, monthsShort) {
   const d = new Date(dateStr + "T00:00:00");
-  return `${d.getDate()} ${SIN_MONTHS_SHORT[d.getMonth()]}`;
+  return `${d.getDate()} ${monthsShort[d.getMonth()]}`;
 }
 
 export default function App() {
@@ -32,6 +96,8 @@ export default function App() {
   const [expCats, setExpCats] = useState(DEFAULT_EXP_CATS);
   const [incCats, setIncCats] = useState(DEFAULT_INC_CATS);
   const [target, setTarget] = useState(30000);
+  const [lang, setLang] = useState("si"); // si | en
+  const [theme, setTheme] = useState("light"); // light | dark
 
   const [tab, setTab] = useState("expense"); // expense | income
   const [amount, setAmount] = useState("");
@@ -42,6 +108,8 @@ export default function App() {
   const [newCatName, setNewCatName] = useState("");
   const [showTargetEdit, setShowTargetEdit] = useState(false);
   const [targetInput, setTargetInput] = useState("30000");
+
+  const t = STRINGS[lang];
 
   // load
   useEffect(() => {
@@ -57,6 +125,8 @@ export default function App() {
             setTarget(data.target);
             setTargetInput(String(data.target));
           }
+          if (data.lang === "si" || data.lang === "en") setLang(data.lang);
+          if (data.theme === "light" || data.theme === "dark") setTheme(data.theme);
         }
       } catch (e) {
         // no existing data yet
@@ -74,7 +144,7 @@ export default function App() {
       try {
         await storage.set(
           "mudal-diary-data",
-          JSON.stringify({ transactions, expCats, incCats, target })
+          JSON.stringify({ transactions, expCats, incCats, target, lang, theme })
         );
       } catch (e) {
         console.error("save failed", e);
@@ -83,7 +153,7 @@ export default function App() {
       }
     };
     save();
-  }, [transactions, expCats, incCats, target, loaded]);
+  }, [transactions, expCats, incCats, target, lang, theme, loaded]);
 
   useEffect(() => {
     setCategory(tab === "expense" ? expCats[0] || "" : incCats[0] || "");
@@ -165,43 +235,62 @@ export default function App() {
 
   if (!loaded) {
     return (
-      <div style={{ ...styles.page, alignItems: "center", justifyContent: "center", display: "flex" }}>
-        <div style={{ color: "var(--ink-soft)", fontSize: 15 }}>පූරණය වෙමින්...</div>
+      <div data-theme={theme} style={{ ...styles.page, alignItems: "center", justifyContent: "center", display: "flex" }}>
+        <div style={{ color: "var(--ink-soft)", fontSize: 15 }}>{t.loading}</div>
         <StyleBlock />
       </div>
     );
   }
 
   return (
-    <div style={styles.page}>
+    <div data-theme={theme} style={styles.page}>
       <StyleBlock />
       <div style={styles.container}>
         {/* Header */}
         <div style={styles.headerRow}>
           <div style={styles.brand}>
             <Wallet size={18} color="var(--gold)" strokeWidth={2.2} />
-            <span style={styles.brandText}>මුදල් ඩයරිය</span>
+            <span style={styles.brandText}>{t.appName}</span>
           </div>
-          <div style={styles.monthPill}>{SIN_MONTHS[now.getMonth()]} {now.getFullYear()}</div>
+          <div style={styles.headerRight}>
+            <div style={styles.monthPill}>{t.months[now.getMonth()]} {now.getFullYear()}</div>
+            <button
+              style={styles.iconBtn}
+              onClick={() => setLang((l) => (l === "si" ? "en" : "si"))}
+              aria-label="toggle language"
+              title={lang === "si" ? "Switch to English" : "සිංහල භාවිතා කරන්න"}
+            >
+              <Languages size={14} />
+              <span style={styles.iconBtnLabel}>{t.langBtn}</span>
+            </button>
+            <button
+              style={styles.iconBtnRound}
+              onClick={() => setTheme((th) => (th === "light" ? "dark" : "light"))}
+              aria-label="toggle dark mode"
+              title={theme === "light" ? "Dark mode" : "Light mode"}
+            >
+              {theme === "light" ? <Moon size={15} /> : <Sun size={15} />}
+            </button>
+          </div>
         </div>
 
         {/* Hero balance */}
         <div style={styles.hero}>
-          <div style={styles.heroLabel}>මෙම මාසයේ ශේෂය</div>
-          <div style={{ ...styles.heroAmount, color: balance < 0 ? "var(--expense)" : "var(--ink)" }}>
-            {fmtMoney(balance)}
+          <div style={styles.heroLabel}>{t.balanceLabel}</div>
+          <div style={{ ...styles.heroAmount, color: balance < 0 ? "var(--expense)" : "#fff" }}>
+            {fmtMoney(balance, t.currency)}
           </div>
           <div style={styles.heroStats}>
             <div style={styles.heroStatItem}>
               <TrendingUp size={14} color="var(--income)" />
-              <span style={{ color: "var(--income)", fontWeight: 600 }}>{fmtMoney(totalIncome)}</span>
-              <span style={styles.heroStatLabel}>ආදායම්</span>
+              <span style={{ color: "var(--income)", fontWeight: 600 }}>{fmtMoney(totalIncome, t.currency)}</span>
+              <span style={styles.heroStatLabel}>{t.incomeLbl}</span>
             </div>
             <div style={styles.heroDivider} />
             <div style={styles.heroStatItem}>
               <TrendingDown size={14} color="var(--expense)" />
-              <span style={{ color: "var(--expense)", fontWeight: 600 }}>{fmtMoney(totalExpense)}</span>
-              <span style={styles.heroStatLabel}>වියදම්</span>
+              <span style={{ color: "var(--expense)", fontWeight: 600 }}>{fmtMoney(totalExpense, t.currency)}</span>
+              <span style={styles.heroStatLabel}>{t.expenseLbl}</span>
             </div>
           </div>
         </div>
@@ -209,7 +298,7 @@ export default function App() {
         {/* Target progress */}
         <div style={styles.card}>
           <div style={styles.targetRow}>
-            <div style={styles.targetLabel}>වියදම් ඉලක්කය</div>
+            <div style={styles.targetLabel}>{t.targetLabel}</div>
             {!showTargetEdit ? (
               <button
                 style={styles.linkBtn}
@@ -218,7 +307,7 @@ export default function App() {
                   setShowTargetEdit(true);
                 }}
               >
-                {fmtMoney(target)} · වෙනස් කරන්න
+                {fmtMoney(target, t.currency)} · {t.change}
               </button>
             ) : (
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -229,7 +318,7 @@ export default function App() {
                   style={styles.inlineInput}
                   autoFocus
                 />
-                <button style={styles.smallBtn} onClick={saveTarget}>සුරකින්න</button>
+                <button style={styles.smallBtn} onClick={saveTarget}>{t.save}</button>
               </div>
             )}
           </div>
@@ -244,8 +333,8 @@ export default function App() {
           </div>
           <div style={styles.progressCaption}>
             {overBudget
-              ? `ඉලක්කයට වඩා ${fmtMoney(totalExpense - target)} වැඩිපුර වියදම් කර ඇත`
-              : `ඉතිරි ${fmtMoney(target - totalExpense)} වියදම් කළ හැක`}
+              ? t.overBudget(fmtMoney(totalExpense - target, t.currency))
+              : t.remaining(fmtMoney(target - totalExpense, t.currency))}
           </div>
         </div>
 
@@ -256,20 +345,20 @@ export default function App() {
               style={{ ...styles.tabBtn, ...(tab === "expense" ? styles.tabBtnActiveExp : {}) }}
               onClick={() => setTab("expense")}
             >
-              වියදමක්
+              {t.expenseTab}
             </button>
             <button
               style={{ ...styles.tabBtn, ...(tab === "income" ? styles.tabBtnActiveInc : {}) }}
               onClick={() => setTab("income")}
             >
-              ආදායමක්
+              {t.incomeTab}
             </button>
           </div>
 
           <div style={styles.formGrid}>
             <input
               type="number"
-              placeholder="මුදල"
+              placeholder={t.amountPlaceholder}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               style={styles.amountInput}
@@ -300,7 +389,7 @@ export default function App() {
               </button>
             ))}
             <button style={styles.chipManage} onClick={() => setShowCatManager((s) => !s)}>
-              {showCatManager ? "✕" : "+ ප්‍රවර්ග"}
+              {showCatManager ? t.closeCats : t.manageCats}
             </button>
           </div>
 
@@ -318,19 +407,19 @@ export default function App() {
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <input
-                  placeholder="අලුත් ප්‍රවර්ගයක් (උදා: බෙහෙත්)"
+                  placeholder={t.newCatPlaceholder}
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addCategory()}
                   style={styles.catInput}
                 />
-                <button style={styles.smallBtn} onClick={addCategory}>එකතු කරන්න</button>
+                <button style={styles.smallBtn} onClick={addCategory}>{t.add}</button>
               </div>
             </div>
           )}
 
           <input
-            placeholder="සටහනක් (විකල්ප)"
+            placeholder={t.notePlaceholder}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             style={styles.noteInput}
@@ -344,34 +433,34 @@ export default function App() {
             onClick={addTransaction}
           >
             <Plus size={16} strokeWidth={2.5} />
-            {tab === "expense" ? "වියදම එකතු කරන්න" : "ආදායම එකතු කරන්න"}
+            {tab === "expense" ? t.addExpense : t.addIncome}
           </button>
         </div>
 
         {/* Transaction list */}
         <div style={styles.listSection}>
           {grouped.length === 0 && (
-            <div style={styles.emptyState}>තවම ගනුදෙනු නැත. ඉහළින් එකක් එකතු කරන්න.</div>
+            <div style={styles.emptyState}>{t.emptyState}</div>
           )}
           {grouped.map(([d, items]) => (
             <div key={d} style={{ marginBottom: 18 }}>
-              <div style={styles.dateHeader}>{sinDate(d)}</div>
-              {items.map((t) => (
-                <div key={t.id} style={styles.txRow}>
+              <div style={styles.dateHeader}>{fmtDate(d, t.monthsShort)}</div>
+              {items.map((tx) => (
+                <div key={tx.id} style={styles.txRow}>
                   <div style={styles.txLeft}>
-                    <div style={styles.txCategory}>{t.category}</div>
-                    {t.note && <div style={styles.txNote}>{t.note}</div>}
+                    <div style={styles.txCategory}>{tx.category}</div>
+                    {tx.note && <div style={styles.txNote}>{tx.note}</div>}
                   </div>
                   <div style={styles.txRight}>
                     <span
                       style={{
-                        color: t.type === "income" ? "var(--income)" : "var(--expense)",
+                        color: tx.type === "income" ? "var(--income)" : "var(--expense)",
                         fontWeight: 700,
                       }}
                     >
-                      {t.type === "income" ? "+" : "-"}{fmtMoney(t.amount).replace("-", "")}
+                      {tx.type === "income" ? "+" : "-"}{fmtMoney(tx.amount, t.currency).replace("-", "")}
                     </span>
-                    <button style={styles.deleteBtn} onClick={() => deleteTransaction(t.id)}>
+                    <button style={styles.deleteBtn} onClick={() => deleteTransaction(tx.id)}>
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -381,7 +470,7 @@ export default function App() {
           ))}
         </div>
 
-        <div style={styles.footerNote}>{saving ? "සුරකිමින්..." : "දත්ත ස්වයංක්‍රීයව සුරකිනු ලැබේ"}</div>
+        <div style={styles.footerNote}>{saving ? t.saving : t.autosave}</div>
       </div>
     </div>
   );
@@ -391,7 +480,7 @@ function StyleBlock() {
   return (
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;500;600;700;800&display=swap');
-      :root {
+      :root, [data-theme="light"] {
         --bg: #F3F6F1;
         --surface: #FFFFFF;
         --ink: #1C2321;
@@ -403,10 +492,24 @@ function StyleBlock() {
         --expense: #A8402F;
         --border: #E1E7DE;
       }
+      [data-theme="dark"] {
+        --bg: #12181A;
+        --surface: #1B2224;
+        --ink: #ECF1EE;
+        --ink-soft: #8FA098;
+        --primary: #2E6357;
+        --primary-soft: #3F7A6C;
+        --gold: #D9B968;
+        --income: #55A57C;
+        --expense: #D9705B;
+        --border: #2A3436;
+      }
       * { box-sizing: border-box; font-family: 'Noto Sans Sinhala', sans-serif; }
       input:focus { outline: 2px solid var(--primary-soft); outline-offset: 1px; }
       button:focus-visible { outline: 2px solid var(--primary-soft); outline-offset: 2px; }
       button { cursor: pointer; font-family: 'Noto Sans Sinhala', sans-serif; }
+      input { background: var(--surface); color: var(--ink); }
+      input::placeholder { color: var(--ink-soft); opacity: 0.8; }
     `}</style>
   );
 }
@@ -417,6 +520,7 @@ const styles = {
     minHeight: "100%",
     width: "100%",
     padding: "20px 14px 40px",
+    transition: "background 0.2s ease",
   },
   container: {
     maxWidth: 480,
@@ -427,9 +531,11 @@ const styles = {
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 18,
+    gap: 8,
   },
   brand: { display: "flex", alignItems: "center", gap: 8 },
   brandText: { fontSize: 17, fontWeight: 700, color: "var(--primary)", letterSpacing: 0.2 },
+  headerRight: { display: "flex", alignItems: "center", gap: 8 },
   monthPill: {
     fontSize: 12.5,
     color: "var(--ink-soft)",
@@ -437,6 +543,31 @@ const styles = {
     border: "1px solid var(--border)",
     borderRadius: 20,
     padding: "5px 12px",
+  },
+  iconBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    fontSize: 12,
+    fontWeight: 700,
+    color: "var(--ink-soft)",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 20,
+    padding: "6px 10px",
+  },
+  iconBtnLabel: { lineHeight: 1 },
+  iconBtnRound: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 28,
+    height: 28,
+    color: "var(--ink-soft)",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: "50%",
+    padding: 0,
   },
   hero: {
     background: "var(--primary)",
