@@ -1,0 +1,6 @@
+{
+  "appId": "com.mudaldiary.app",
+  "appName": "මුදල් ඩයරිය",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
