@@ -24,6 +24,9 @@ const STRINGS = {
     save: "සුරකින්න",
     overBudget: (amt) => `ඉලක්කයට වඩා ${amt} වැඩිපුර වියදම් කර ඇත`,
     remaining: (amt) => `ඉතිරි ${amt} වියදම් කළ හැක`,
+    earningTargetLabel: "ආදායම් ඉලක්කය",
+    earningOver: (amt) => `ඉලක්කයට වඩා ${amt} වැඩිපුර උපයා ඇත`,
+    earningRemaining: (amt) => `ඉලක්කය සපුරන්න තවත් ${amt} අවශ්‍යයි`,
     expenseTab: "වියදමක්",
     incomeTab: "ආදායමක්",
     amountPlaceholder: "මුදල",
@@ -53,6 +56,9 @@ const STRINGS = {
     save: "Save",
     overBudget: (amt) => `${amt} over your target`,
     remaining: (amt) => `${amt} left to spend`,
+    earningTargetLabel: "Earning target",
+    earningOver: (amt) => `${amt} over your goal`,
+    earningRemaining: (amt) => `${amt} more to reach your goal`,
     expenseTab: "Expense",
     incomeTab: "Income",
     amountPlaceholder: "Amount",
@@ -96,6 +102,7 @@ export default function App() {
   const [expCats, setExpCats] = useState(DEFAULT_EXP_CATS);
   const [incCats, setIncCats] = useState(DEFAULT_INC_CATS);
   const [target, setTarget] = useState(30000);
+  const [earningTarget, setEarningTarget] = useState(50000);
   const [lang, setLang] = useState("si"); // si | en
   const [theme, setTheme] = useState("light"); // light | dark
 
@@ -108,6 +115,8 @@ export default function App() {
   const [newCatName, setNewCatName] = useState("");
   const [showTargetEdit, setShowTargetEdit] = useState(false);
   const [targetInput, setTargetInput] = useState("30000");
+  const [showEarningTargetEdit, setShowEarningTargetEdit] = useState(false);
+  const [earningTargetInput, setEarningTargetInput] = useState("50000");
 
   const t = STRINGS[lang];
 
@@ -124,6 +133,10 @@ export default function App() {
           if (typeof data.target === "number") {
             setTarget(data.target);
             setTargetInput(String(data.target));
+          }
+          if (typeof data.earningTarget === "number") {
+            setEarningTarget(data.earningTarget);
+            setEarningTargetInput(String(data.earningTarget));
           }
           if (data.lang === "si" || data.lang === "en") setLang(data.lang);
           if (data.theme === "light" || data.theme === "dark") setTheme(data.theme);
@@ -144,7 +157,7 @@ export default function App() {
       try {
         await storage.set(
           "mudal-diary-data",
-          JSON.stringify({ transactions, expCats, incCats, target, lang, theme })
+          JSON.stringify({ transactions, expCats, incCats, target, earningTarget, lang, theme })
         );
       } catch (e) {
         console.error("save failed", e);
@@ -153,7 +166,7 @@ export default function App() {
       }
     };
     save();
-  }, [transactions, expCats, incCats, target, lang, theme, loaded]);
+  }, [transactions, expCats, incCats, target, earningTarget, lang, theme, loaded]);
 
   useEffect(() => {
     setCategory(tab === "expense" ? expCats[0] || "" : incCats[0] || "");
@@ -178,6 +191,8 @@ export default function App() {
   const balance = totalIncome - totalExpense;
   const progressPct = target > 0 ? Math.min(100, (totalExpense / target) * 100) : 0;
   const overBudget = totalExpense > target;
+  const earningProgressPct = earningTarget > 0 ? Math.min(100, (totalIncome / earningTarget) * 100) : 0;
+  const earningReached = totalIncome >= earningTarget;
 
   const grouped = useMemo(() => {
     const sorted = [...transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
@@ -229,6 +244,12 @@ export default function App() {
     const v = parseFloat(targetInput);
     if (!isNaN(v) && v >= 0) setTarget(v);
     setShowTargetEdit(false);
+  }
+
+  function saveEarningTarget() {
+    const v = parseFloat(earningTargetInput);
+    if (!isNaN(v) && v >= 0) setEarningTarget(v);
+    setShowEarningTargetEdit(false);
   }
 
   const activeCats = tab === "expense" ? expCats : incCats;
@@ -335,6 +356,49 @@ export default function App() {
             {overBudget
               ? t.overBudget(fmtMoney(totalExpense - target, t.currency))
               : t.remaining(fmtMoney(target - totalExpense, t.currency))}
+          </div>
+        </div>
+
+        {/* Earning target */}
+        <div style={styles.card}>
+          <div style={styles.targetRow}>
+            <div style={styles.targetLabel}>{t.earningTargetLabel}</div>
+            {!showEarningTargetEdit ? (
+              <button
+                style={styles.linkBtn}
+                onClick={() => {
+                  setEarningTargetInput(String(earningTarget));
+                  setShowEarningTargetEdit(true);
+                }}
+              >
+                {fmtMoney(earningTarget, t.currency)} · {t.change}
+              </button>
+            ) : (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="number"
+                  value={earningTargetInput}
+                  onChange={(e) => setEarningTargetInput(e.target.value)}
+                  style={styles.inlineInput}
+                  autoFocus
+                />
+                <button style={styles.smallBtn} onClick={saveEarningTarget}>{t.save}</button>
+              </div>
+            )}
+          </div>
+          <div style={styles.progressTrack}>
+            <div
+              style={{
+                ...styles.progressFill,
+                width: `${earningProgressPct}%`,
+                background: "var(--income)",
+              }}
+            />
+          </div>
+          <div style={styles.progressCaption}>
+            {earningReached
+              ? t.earningOver(fmtMoney(totalIncome - earningTarget, t.currency))
+              : t.earningRemaining(fmtMoney(earningTarget - totalIncome, t.currency))}
           </div>
         </div>
 
